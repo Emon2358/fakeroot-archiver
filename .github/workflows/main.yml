@@ -22,7 +22,7 @@ jobs:
           sudo apt-get install -y fakeroot
 
       - name: Setup GitHub CLI
-        uses: cli/gh-action@v2
+        uses: ghactions/gh-cli@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -55,7 +55,7 @@ jobs:
           git push origin HEAD:${{ github.ref }}
 
       - name: Upload archive artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: repository-archives
           path: archives/*.tar.gz
