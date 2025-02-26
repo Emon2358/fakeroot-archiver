@@ -1,0 +1,61 @@
+name: Archive All My Repositories with Fakeroot
+
+on:
+  workflow_dispatch: {}           # 手動トリガー
+  schedule:
+    - cron: '0 0 * * 0'           # 毎週日曜 0:00 に実行（必要に応じて変更）
+
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    env:
+      OWNER: ${{ github.repository_owner }}  # このリポジトリのオーナー（ユーザー名）
+    steps:
+      - name: Checkout current repository
+        uses: actions/checkout@v3
+        with:
+          persist-credentials: true
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fakeroot
+
+      - name: Setup GitHub CLI
+        uses: cli/gh-action@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: List all repositories for owner
+        id: list_repos
+        run: |
+          # オーナーのリポジトリ一覧を JSON 形式で取得し、各行に「リポジトリ名 クローン URL」を出力
+          gh repo list $OWNER --limit 1000 --json name,cloneUrl --jq '.[] | "\(.name) \(.cloneUrl)"' > repos.txt
+          echo "Found repositories:"
+          cat repos.txt
+
+      - name: Archive repositories with fakeroot
+        run: |
+          mkdir -p archives
+          while IFS=' ' read -r repo_name repo_url; do
+            echo "Processing $repo_name"
+            # 各リポジトリを shallow clone（最新コミットのみ）で取得
+            git clone --depth 1 "$repo_url" "$repo_name"
+            # fakeroot を使い、リポジトリのディレクトリを tar.gz 形式でアーカイブ
+            fakeroot tar czf "archives/${repo_name}.tar.gz" "$repo_name"
+            rm -rf "$repo_name"
+          done < repos.txt
+
+      - name: Commit and push archives to current repository
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add archives
+          git commit -m "Archive all repositories via fakeroot" || echo "No changes to commit"
+          git push origin HEAD:${{ github.ref }}
+
+      - name: Upload archive artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: repository-archives
+          path: archives/*.tar.gz
